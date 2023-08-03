@@ -1,4 +1,4 @@
-# Negotiation Cordapp 
+# Energy Market Backend
 
 This CorDapp shows how multi-party negotiation is handled on the Corda ledger, in the absence of an API for user
 interaction.
