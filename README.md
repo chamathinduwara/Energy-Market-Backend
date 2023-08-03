@@ -7,8 +7,6 @@ Power your energy market operations with the Energy Market Backend – a Java 8-
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-- [Usage](#usage)
-- [API Documentation](#api-documentation)
 - [Negotiation States](#negotiation-states)
 - [Flows](#flows)
 - [Contributing](#contributing)
