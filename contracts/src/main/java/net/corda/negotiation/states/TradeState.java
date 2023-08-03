@@ -2,6 +2,7 @@ package net.corda.negotiation.states;
 
 import com.google.common.collect.ImmutableList;
 import net.corda.negotiation.contracts.ProposalAndTradeContract;
+
 import net.corda.core.contracts.BelongsToContract;
 import net.corda.core.contracts.LinearState;
 import net.corda.core.contracts.UniqueIdentifier;
@@ -27,6 +28,7 @@ public class TradeState implements LinearState {
         this.seller = seller;
         this.linearId = linearId;
     }
+
 
     public TradeState(Double amount,Double unitPrice, Party buyer, Party seller) {
         this.amount = amount;

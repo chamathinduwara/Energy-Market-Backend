@@ -6,12 +6,13 @@ import net.corda.core.contracts.LinearState;
 import net.corda.core.contracts.UniqueIdentifier;
 import net.corda.core.identity.AbstractParty;
 import net.corda.core.identity.Party;
-import net.corda.negotiation.contracts.ModifyContract;
-import net.corda.negotiation.contracts.ProposalContract;
+import net.corda.core.serialization.ConstructorForDeserialization;
+
+import net.corda.negotiation.contracts.ProposalAndTradeContract;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
-@BelongsToContract(ModifyContract.class)
+@BelongsToContract(ProposalAndTradeContract.class)
 public class ModifyState implements LinearState {
 
     private Double amount;
@@ -22,6 +23,7 @@ public class ModifyState implements LinearState {
     private Party proposee;
     private UniqueIdentifier linearId;
 
+    @ConstructorForDeserialization
     public ModifyState(Double amount, Double unitPrice, Party buyer, Party seller,
                        Party proposer, Party proposee, UniqueIdentifier linearId) {
         this.amount = amount;
@@ -61,7 +63,7 @@ public class ModifyState implements LinearState {
     }
 
     public Party getProposer() {
-        return proposee;
+        return proposer;
     }
 
     public Party getProposee() {

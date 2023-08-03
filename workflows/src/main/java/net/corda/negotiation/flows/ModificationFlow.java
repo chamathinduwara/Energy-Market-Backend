@@ -2,7 +2,11 @@ package net.corda.negotiation.flows;
 
 import co.paralleluniverse.fibers.Suspendable;
 import com.google.common.collect.ImmutableList;
+
+
+import net.corda.core.internal.FetchDataFlow;
 import net.corda.negotiation.contracts.ProposalAndTradeContract;
+import net.corda.negotiation.states.ModifyState;
 import net.corda.negotiation.states.ProposalState;
 import net.corda.core.contracts.Command;
 import net.corda.core.contracts.StateAndRef;
@@ -10,8 +14,7 @@ import net.corda.core.contracts.UniqueIdentifier;
 import net.corda.core.crypto.SecureHash;
 import net.corda.core.flows.*;
 import net.corda.core.identity.Party;
-import net.corda.core.node.services.Vault;
-import net.corda.core.node.services.vault.QueryCriteria;
+
 import net.corda.core.transactions.LedgerTransaction;
 import net.corda.core.transactions.SignedTransaction;
 import net.corda.core.transactions.TransactionBuilder;
@@ -30,29 +33,42 @@ public class ModificationFlow {
         private UniqueIdentifier proposalId;
         private Double newAmount;
         private Double newUnitPrice;
-        private Double newRate;
         private ProgressTracker progressTracker = new ProgressTracker();
 
-        public Initiator(UniqueIdentifier proposalId, Double newAmount, Double newUnitPrice, Double newRate) {
+        public Initiator(UniqueIdentifier proposalId, Double newAmount, Double newUnitPrice) {
             this.proposalId = proposalId;
             this.newAmount = newAmount;
             this.newUnitPrice = newUnitPrice;
-            this.newRate = newRate;
         }
 
         @Suspendable
         @Override
         public SignedTransaction call() throws FlowException {
-            QueryCriteria.LinearStateQueryCriteria inputCriteria = new QueryCriteria.LinearStateQueryCriteria(null, ImmutableList.of(proposalId), Vault.StateStatus.UNCONSUMED, null);
-            StateAndRef inputStateAndRef = getServiceHub().getVaultService().queryBy(ProposalState.class).getStates().get(0);
-            ProposalState input = (ProposalState) inputStateAndRef.getState().getData();
+
+            List<StateAndRef<ProposalState>> ProposalStateAndRefs = getServiceHub().getVaultService().queryBy(ProposalState.class).getStates();
+
+            StateAndRef<ProposalState> inputStateAndRef = ProposalStateAndRefs.stream().filter(ProposalStateAndRef ->{
+                ProposalState proposalState = ProposalStateAndRef.getState().getData();
+                return proposalState.getLinearId().equals(proposalId);
+            }).findAny().orElseThrow(() -> new IllegalArgumentException("proposal not found"));
+
+
+            ProposalState input = inputStateAndRef.getState().getData();
 
             //Creating the output
-            Party counterparty = (getOurIdentity().equals(input.getProposer()))? input.getProposee() : input.getProposer();
-            ProposalState output = new ProposalState(newAmount,newUnitPrice, newRate, input.getBuyer(),input.getSeller(), getOurIdentity(), counterparty, input.getLinearId());
+            Party counterparty = (getOurIdentity().getOwningKey().equals(input.getProposee().getOwningKey()))? input.getProposer() : input.getProposee();
 
+            if (!getOurIdentity().getOwningKey().equals(input.getProposee().getOwningKey())){
+                throw new IllegalArgumentException("you are not the proposee");
+            } else if (!counterparty.getOwningKey().equals(input.getProposer().getOwningKey())) {
+                throw new IllegalArgumentException("counterparty is not the proposer");
+            }
+
+            ModifyState output = new ModifyState(newAmount, newUnitPrice, input.getBuyer(), input.getSeller(), counterparty, getOurIdentity(), input.getLinearId());
+
+//
             //Creating the command
-            List<PublicKey> requiredSigners = ImmutableList.of(input.getProposee().getOwningKey(), input.getProposer().getOwningKey());
+            List<PublicKey> requiredSigners = ImmutableList.of(counterparty.getOwningKey(), getOurIdentity().getOwningKey());
             Command command = new Command(new ProposalAndTradeContract.Commands.Modify(), requiredSigners);
 
             //Building the transaction
@@ -102,7 +118,6 @@ public class ModificationFlow {
                 }
             };
             SecureHash txId = subFlow(signTransactionFlow).getId();
-
             SignedTransaction finalisedTx = subFlow(new ReceiveFinalityFlow(counterpartySession, txId));
             return finalisedTx;
         }

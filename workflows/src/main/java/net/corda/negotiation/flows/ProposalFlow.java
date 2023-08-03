@@ -2,8 +2,11 @@ package net.corda.negotiation.flows;
 
 import co.paralleluniverse.fibers.Suspendable;
 import com.google.common.collect.ImmutableList;
+
 import net.corda.negotiation.contracts.ProposalAndTradeContract;
+
 import net.corda.negotiation.states.ProposalState;
+
 import net.corda.core.contracts.Command;
 import net.corda.core.crypto.SecureHash;
 import net.corda.core.flows.*;
@@ -22,17 +25,21 @@ public class ProposalFlow {
     public static class Initiator extends FlowLogic<SignedTransaction> {
         private Boolean isBuyer;
         private Double amount;
-        private Double rate;
         private Double unitPrice;
         private Party counterparty;
 
-        public Initiator(Boolean isBuyer, Double amount,Double unitPrice, Double rate, Party counterparty) {
+//        private String notaryName;
+
+        public Initiator(Boolean isBuyer, Double amount,Double unitPrice, Party counterparty) {
             this.isBuyer = isBuyer;
             this.amount = amount;
             this.unitPrice = unitPrice;
-            this.rate = rate;
             this.counterparty = counterparty;
         }
+
+//        public void setNotaryName(String notaryName) {
+//            this.notaryName = notaryName;
+//        }
 
         @Suspendable
         @Override
@@ -41,23 +48,27 @@ public class ProposalFlow {
             if(isBuyer){
                 buyer = getOurIdentity();
                 seller = counterparty;
-            }else{
-                buyer = counterparty;
-                seller = getOurIdentity();
+            }else {
+                throw new FlowException("Invalid initiator");
             }
-            ProposalState output = new ProposalState(amount,unitPrice, rate, buyer, seller,getOurIdentity(), counterparty);
+            ProposalState output = new ProposalState(amount, unitPrice, buyer, seller,buyer, seller);
 
             //Creating the command
             ProposalAndTradeContract.Commands.Propose commandType = new ProposalAndTradeContract.Commands.Propose();
+
+//  collecting public keys
             List<PublicKey> requiredSigners = ImmutableList.of(getOurIdentity().getOwningKey(), counterparty.getOwningKey());
             Command command = new Command(commandType, requiredSigners);
 
-            //Building the transaction
+            //Building the Proposal
 
             // Obtain a reference to a notary we wish to use.
             /** Explicit selection of notary by CordaX500Name - argument can by coded in flows or parsed from config (Preferred)*/
-            final Party notary = getServiceHub().getNetworkMapCache().getNotary(CordaX500Name.parse("O=Notary,L=London,C=GB"));
+            final Party notary = getServiceHub().getNetworkMapCache().getNotary(CordaX500Name.parse("O=Notary,L=moratuwa,C=SL"));
 
+            if (notary == null) {
+                throw new FlowException("Notary not found");
+            }
             TransactionBuilder txBuilder = new TransactionBuilder(notary)
                     .addOutputState(output, ProposalAndTradeContract.ID)
                     .addCommand(command);

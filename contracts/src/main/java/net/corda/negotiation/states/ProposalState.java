@@ -8,12 +8,13 @@ import net.corda.core.contracts.UniqueIdentifier;
 import net.corda.core.identity.AbstractParty;
 import net.corda.core.identity.Party;
 import net.corda.core.serialization.ConstructorForDeserialization;
-import net.corda.negotiation.contracts.ProposalContract;
+import net.corda.negotiation.contracts.ProposalAndTradeContract;
+
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
-@BelongsToContract(ProposalContract.class)
+@BelongsToContract(ProposalAndTradeContract.class)
 public class ProposalState implements LinearState {
     private Double amount;
     private Double unitPrice;

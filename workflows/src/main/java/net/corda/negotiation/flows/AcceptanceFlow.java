@@ -3,18 +3,22 @@ package net.corda.negotiation.flows;
 import co.paralleluniverse.fibers.Suspendable;
 import com.google.common.collect.ImmutableList;
 
-import net.corda.negotiation.states.ProposalState;
-import net.corda.negotiation.states.TradeState;
+
+import net.corda.core.transactions.LedgerTransaction;
 import net.corda.negotiation.contracts.ProposalAndTradeContract;
+import net.corda.negotiation.states.ModifyState;
+
+import net.corda.negotiation.states.TradeState;
 import net.corda.core.contracts.Command;
 import net.corda.core.contracts.StateAndRef;
+
+
 import net.corda.core.contracts.UniqueIdentifier;
 import net.corda.core.crypto.SecureHash;
 import net.corda.core.flows.*;
 import net.corda.core.identity.Party;
-import net.corda.core.node.services.Vault;
-import net.corda.core.node.services.vault.QueryCriteria;
-import net.corda.core.transactions.LedgerTransaction;
+
+
 import net.corda.core.transactions.SignedTransaction;
 import net.corda.core.transactions.TransactionBuilder;
 import net.corda.core.utilities.ProgressTracker;
@@ -41,17 +45,23 @@ public class AcceptanceFlow {
         @Override
         public SignedTransaction call() throws FlowException {
 
-            QueryCriteria.LinearStateQueryCriteria inputCriteria = new QueryCriteria.LinearStateQueryCriteria(null, ImmutableList.of(proposalId), Vault.StateStatus.UNCONSUMED,null);
 
-            StateAndRef inputStateAndRef = getServiceHub().getVaultService().queryBy(ProposalState.class).getStates().get(0);
+            List<StateAndRef<ModifyState>> ProposalStateAndRefs = getServiceHub().getVaultService().queryBy(ModifyState.class).getStates();
 
-            ProposalState input = (ProposalState) inputStateAndRef.getState().getData();
 
+            StateAndRef<ModifyState> inputStateAndRef = ProposalStateAndRefs.stream().filter(ProposalStateAndRef -> {
+                ModifyState modifyState  = ProposalStateAndRef.getState().getData();
+                return modifyState.getLinearId().equals(proposalId);
+            }).findAny().orElseThrow(() -> new IllegalArgumentException("Proposal not found"));
+
+            ModifyState input = inputStateAndRef.getState().getData();
+
+            Party counterparty = (getOurIdentity().getOwningKey().equals(input.getProposer().getOwningKey()))? input.getProposee() : input.getProposer();
             //Creating the output
-            TradeState output = new TradeState(input.getAmount(), input.getUnitPrice(), input.getRate(), input.getBuyer(), input.getSeller(), input.getLinearId());
+            TradeState output = new TradeState(input.getAmount(), input.getUnitPrice(), input.getBuyer(), input.getSeller(), input.getLinearId());
 
             //Creating the command
-            List<PublicKey> requiredSigners = ImmutableList.of(input.getProposee().getOwningKey(), input.getProposer().getOwningKey());
+            List<PublicKey> requiredSigners = ImmutableList.of(input.getProposer().getOwningKey(), input.getProposee().getOwningKey());
             Command command = new Command(new ProposalAndTradeContract.Commands.Accept(), requiredSigners);
 
            //Building the transaction
@@ -65,11 +75,11 @@ public class AcceptanceFlow {
             SignedTransaction partStx = getServiceHub().signInitialTransaction(txBuilder);
 
             //Gathering the counterparty's signature
-            Party counterparty = (getOurIdentity().equals(input.getProposer()))? input.getProposee() : input.getProposer();
+
             FlowSession counterpartySession = initiateFlow(counterparty);
             SignedTransaction fullyStx = subFlow(new CollectSignaturesFlow(partStx, ImmutableList.of(counterpartySession)));
 
-            // Finalising the transaction
+            // Finalising the1 transaction
             SignedTransaction finalisedTx  = subFlow(new FinalityFlow(fullyStx, ImmutableList.of(counterpartySession)));
             return finalisedTx;
         }
@@ -92,15 +102,13 @@ public class AcceptanceFlow {
                 protected void checkTransaction(@NotNull SignedTransaction stx) throws FlowException {
                     try {
                         LedgerTransaction ledgerTx = stx.toLedgerTransaction(getServiceHub(), false);
-                        Party proposee = ledgerTx.inputsOfType(ProposalState.class).get(0).getProposee();
-                        if(!proposee.equals(counterpartySession.getCounterparty())){
-                            throw new FlowException("Only the proposee can accept a proposal.");
+                        Party proposer = ledgerTx.inputsOfType(ModifyState.class).get(0).getProposer();
+                        if(!proposer.equals(counterpartySession.getCounterparty())){
+                            throw new FlowException("Only the proposer can accept a proposal.");
                         }
                     } catch (SignatureException e) {
                         throw new FlowException("Check transaction failed");
                     }
-
-
                 }
             };
             SecureHash txId = subFlow(signTransactionFlow).getId();

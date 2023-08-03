@@ -1,6 +1,8 @@
 package net.corda.negotiation.contracts;
 
 import com.google.common.collect.ImmutableSet;
+import net.corda.negotiation.states.KillState;
+import net.corda.negotiation.states.ModifyState;
 import net.corda.negotiation.states.ProposalState;
 import net.corda.negotiation.states.TradeState;
 import net.corda.core.contracts.CommandData;
@@ -13,7 +15,7 @@ import java.util.Objects;
 import static net.corda.core.contracts.ContractsDSL.requireThat;
 
 public class ProposalAndTradeContract implements Contract {
-    public static String ID = "net.corda.samples.negotiation.contracts.ProposalAndTradeContract";
+    public static String ID = "net.corda.negotiation.contracts.ProposalAndTradeContract";
 
     @Override
     public void verify(LedgerTransaction tx) throws IllegalArgumentException {
@@ -35,13 +37,13 @@ public class ProposalAndTradeContract implements Contract {
         } else if (command.getValue() instanceof Commands.Accept) {
             requireThat(require -> {
                 require.using("There is exactly one input", tx.getInputStates().size() == 1);
-                require.using("The single input is of type ProposalState", tx.inputsOfType(ProposalState.class).size() == 1);
+                require.using("The single input is of type ProposalState", tx.inputsOfType(ModifyState.class).size() == 1);
                 require.using("There is exactly one output", tx.getOutputs().size() == 1);
                 require.using("The single output is of type TradeState", tx.outputsOfType(TradeState.class).size() == 1);
                 require.using("There is exactly one command", tx.getCommands().size() == 1);
                 require.using("There is no timestamp", tx.getTimeWindow() == null);
 
-                ProposalState input = tx.inputsOfType(ProposalState.class).get(0);
+                ModifyState input = tx.inputsOfType(ModifyState.class).get(0);
                 TradeState output = tx.outputsOfType(TradeState.class).get(0);
 
 //                require.using("The amount is unmodified in the output", output.getAmount() == input.getAmount());
@@ -57,14 +59,13 @@ public class ProposalAndTradeContract implements Contract {
                 require.using("There is exactly one input", tx.getInputStates().size() == 1);
                 require.using("The single input is of type ProposalState", tx.inputsOfType(ProposalState.class).size() == 1);
                 require.using("There is exactly one output", tx.getOutputs().size() == 1);
-                require.using("The single output is of type ProposalState", tx.outputsOfType(ProposalState.class).size() == 1);
+                require.using("The single output is of type ModifyState", tx.outputsOfType(ModifyState.class).size() == 1);
                 require.using("There is exactly one command", tx.getCommands().size() == 1);
                 require.using("There is no timestamp", tx.getTimeWindow() == null);
 
                 ProposalState input = tx.inputsOfType(ProposalState.class).get(0);
-                ProposalState output = tx.outputsOfType(ProposalState.class).get(0);
+                ModifyState output = tx.outputsOfType(ModifyState.class).get(0);
 
-                require.using("The amount is unmodified in the output", !Objects.equals(output.getAmount(), input.getAmount()));
                 require.using("The buyer is unmodified in the output", input.getBuyer().equals(output.getBuyer()));
                 require.using("The seller is unmodified in the output", input.getSeller().equals(output.getSeller()));
 
@@ -72,6 +73,19 @@ public class ProposalAndTradeContract implements Contract {
                 require.using("The proposee is a required signer", command.getSigners().contains(input.getProposee().getOwningKey()));
                 return null;
 
+            });
+        } else if ((command.getValue() instanceof Commands.Kill)) {
+            requireThat(require -> {
+                require.using("There is exactly one input", tx.getInputStates().size() == 1);
+                require.using("There is exactly one output", tx.getOutputs().size() == 1);
+                require.using("The single output is of type KillState", tx.outputsOfType(KillState.class).size() == 1);
+                require.using("There is exactly one command", tx.getCommands().size() == 1);
+                require.using("There is no timestamp", tx.getTimeWindow() == null);
+
+                KillState output = tx.outputsOfType(KillState.class).get(0);
+                require.using("The proposer is a required signer", command.getSigners().contains(output.getProposer().getOwningKey()));
+                require.using("The proposee is a required signer", command.getSigners().contains(output.getProposee().getOwningKey()));
+                return null;
             });
         } else {
             throw new IllegalArgumentException("Command of incorrect type");
@@ -95,5 +109,8 @@ public class ProposalAndTradeContract implements Contract {
         }
 
         ;
+        class Kill implements Commands{
+
+        };
     }
 }
